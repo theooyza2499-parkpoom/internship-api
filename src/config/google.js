@@ -1,36 +1,53 @@
 const { google } = require('googleapis');
-const path = require('path');
 require('dotenv').config();
 
-// ============================================================
-//  ตรวจสอบและเลือกวิธีการ Authentication
-// ============================================================
-let auth;
-
-// 1. ตรวจสอบว่ามี Environment Variable GOOGLE_CREDENTIALS หรือไม่ (สำหรับ Production)
-if (process.env.GOOGLE_CREDENTIALS) {
-  try {
-    // แปลง JSON string ที่เก็บใน Environment Variable ให้เป็น Object
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    
-    auth = new google.auth.GoogleAuth({
-      credentials: credentials,
-      scopes: [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive.file',
-        'https://www.googleapis.com/auth/drive.readonly'
-      ]
-    });
-    console.log('✅ ใช้ Google Credentials จาก Environment Variable');
-  } catch (error) {
-    console.error('❌ ไม่สามารถแปลง GOOGLE_CREDENTIALS ได้:', error.message);
-    // Fallback ไปใช้ไฟล์
-    useKeyFile();
+// ✅ ใช้ Environment Variable GOOGLE_CREDENTIALS
+let credentials;
+try {
+  // ตรวจสอบว่า GOOGLE_CREDENTIALS มีอยู่และเป็น JSON ที่ถูกต้อง
+  if (process.env.GOOGLE_CREDENTIALS) {
+    credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    console.log('✅ ใช้ credentials จาก Environment Variable');
+  } else {
+    // Fallback: ใช้ไฟล์
+    const fs = require('fs');
+    const path = require('path');
+    const keyPath = path.join(__dirname, '../../credentials/service-account-key.json');
+    if (fs.existsSync(keyPath)) {
+      credentials = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+      console.log('✅ ใช้ credentials จากไฟล์');
+    } else {
+      throw new Error('ไม่พบ Credentials ทั้งใน Environment และไฟล์');
+    }
   }
-} else {
-  // 2. ถ้าไม่มี Environment Variable ให้ใช้ไฟล์ (สำหรับ Development)
-  useKeyFile();
+} catch (error) {
+  console.error('❌ Error parsing credentials:', error.message);
+  throw new Error('Credentials ไม่ถูกต้อง');
 }
+
+// ✅ ใช้ credentials แทน keyFile
+const auth = new google.auth.GoogleAuth({
+  credentials: credentials,  // ใช้ object โดยตรง
+  scopes: [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.readonly'
+  ]
+});
+
+const sheets = google.sheets({ version: 'v4', auth });
+const drive = google.drive({ version: 'v3', auth });
+
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
+const DRIVE_FOLDER_ID = process.env.DRIVE_FOLDER_ID;
+
+module.exports = {
+  auth,
+  sheets,
+  drive,
+  SPREADSHEET_ID,
+  DRIVE_FOLDER_ID
+};
 
 // ============================================================
 //  ฟังก์ชันสำหรับอ่าน Credentials จากไฟล์ (Development)
