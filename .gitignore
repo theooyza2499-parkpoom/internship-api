@@ -1,0 +1,5 @@
+# Google Credentials
+credentials/*.json
+*.key.json
+service-account-key.json
+GOOGLE_CREDENTIALS.json
