@@ -115,6 +115,61 @@ app.get('/', (req, res) => {
 });
 
 // ============================================================
+//  Address API (สำหรับค้นหาที่อยู่)
+// ============================================================
+const addressService = require('./src/services/addressService');
+
+// ค้นหาจังหวัด
+app.get('/api/address/provinces', (req, res) => {
+  const { keyword } = req.query;
+  const results = addressService.searchProvinces(keyword);
+  res.json({ success: true, data: results });
+});
+
+// ค้นหาอำเภอ
+app.get('/api/address/districts', (req, res) => {
+  const { province, keyword } = req.query;
+  if (!province) {
+    return res.status(400).json({ success: false, message: 'กรุณาระบุจังหวัด' });
+  }
+  const results = addressService.searchDistricts(province, keyword);
+  res.json({ success: true, data: results });
+});
+
+// ค้นหาตำบล
+app.get('/api/address/subdistricts', (req, res) => {
+  const { province, district, keyword } = req.query;
+  if (!province || !district) {
+    return res.status(400).json({ success: false, message: 'กรุณาระบุจังหวัดและอำเภอ' });
+  }
+  const results = addressService.searchSubDistricts(province, district, keyword);
+  res.json({ success: true, data: results });
+});
+
+// ค้นหารหัสไปรษณีย์
+app.get('/api/address/postalcode', (req, res) => {
+  const { province, district, subDistrict } = req.query;
+  if (!province || !district || !subDistrict) {
+    return res.status(400).json({ success: false, message: 'กรุณาระบุข้อมูลให้ครบ' });
+  }
+  const postalCode = addressService.getPostalCode(province, district, subDistrict);
+  res.json({ success: true, data: postalCode });
+});
+
+// ค้นหาแบบเต็ม (พิมพ์อะไรก็ได้)
+app.get('/api/address/search', (req, res) => {
+  const { keyword } = req.query;
+  if (!keyword) {
+    return res.status(400).json({ success: false, message: 'กรุณาระบุคำค้น' });
+  }
+  const results = addressService.searchAll(keyword);
+  // จำกัดผลลัพธ์สูงสุด 50 รายการ
+  const limited = results.slice(0, 50);
+  res.json({ success: true, data: limited, total: results.length });
+});
+
+
+// ============================================================
 //  404 Handler (เส้นทางไม่พบ)
 // ============================================================
 app.use((req, res) => {
