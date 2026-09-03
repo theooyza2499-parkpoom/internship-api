@@ -154,6 +154,34 @@ app.use((err, req, res, next) => {
     });
 });
 
+
+// ============================================================
+//  Test Endpoint (สำหรับทดสอบ Google Sheets)
+// ============================================================
+app.get('/test-sheet', async (req, res) => {
+    try {
+        const { sheets, SPREADSHEET_ID } = require('./src/config/google');
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'การแจ้งเตือน!A1:F1',
+        });
+        res.json({
+            success: true,
+            headers: response.data.values,
+            message: '✅ เชื่อมต่อ Google Sheets สำเร็จ'
+        });
+    } catch (error) {
+        console.error('❌ Test Sheet Error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: error.message,
+            details: error.response?.data || 'ไม่มีรายละเอียดเพิ่มเติม'
+        });
+    }
+});
+
+
+
 // ============================================================
 //  Start Server
 // ============================================================
