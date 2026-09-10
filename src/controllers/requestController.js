@@ -59,128 +59,100 @@ class RequestController {
     // 1. สร้างคำร้องใหม่
     // ==========================================================
     async createRequest(req, res) {
-        try {
-            const requestData = req.body;
-            
-            const validation = validateRequest(requestData);
-            if (!validation.isValid) {
-                return res.status(400).json({
-                    success: false,
-                    errors: validation.errors
-                });
-            }
-
-            const hasIncomplete = await sheetsService.hasIncompleteRequest(requestData.studentId);
-            if (hasIncomplete) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'มีคำร้องที่ยังไม่เสร็จสิ้นสำหรับรหัสนักศึกษานี้'
-                });
-            }
-
-            const existingData = await sheetsService.getSheetData('คำร้องขอฝึกประสบการณ์!A:A');
-            const count = existingData.length - 1;
-            const year = moment().format('YYYY');
-            const requestNumber = generateRequestNumber(year, count);
-
-            const timestamp = moment().toISOString();
-            const row = [
-                requestNumber,
-                requestData.studentId,
-                requestData.prefix,
-                requestData.firstName,
-                requestData.lastName,
-                requestData.phone,
-                requestData.level,
-                requestData.major,
-                requestData.system,
-                requestData.companyName,
-                requestData.contactPerson,
-                requestData.address.number,
-                requestData.address.building,
-                requestData.address.village,
-                requestData.address.street,
-                requestData.address.subDistrict,
-                requestData.address.district,
-                requestData.address.province,
-                requestData.address.postalCode,
-                timestamp,
-                '⏳ รอจัดทำหนังสือตอบรับ',
-                '',
-                '',
-                '',
-                '',
-                '',
-                '',
-                '',
-                '',
-                '',
-                'เปิดแก้ไข',
-                year
-            ];
-
-            await sheetsService.appendData('คำร้องขอฝึกประสบการณ์!A:AF', row);
-
-            await logService.addLog(
-                requestNumber,
-                'ยื่นคำร้อง',
-                `นักศึกษา ${requestData.prefix}${requestData.firstName} ${requestData.lastName} (${requestData.studentId}) ยื่นคำร้องขอฝึกประสบการณ์`,
-                `student-${requestData.studentId}`
-            );
-
-            // 🔔 ส่ง Line Notify
-            await sendLineNotify(
-                `📢 มีคำร้องใหม่!\n` +
-                `━━━━━━━━━━━━━━━━━\n` +
-                `📌 เลขที่: ${requestNumber}\n` +
-                `👤 นักศึกษา: ${requestData.prefix}${requestData.firstName} ${requestData.lastName}\n` +
-                `🆔 รหัส: ${requestData.studentId}\n` +
-                `🏢 สถานที่: ${requestData.companyName}\n` +
-                `📅 วันที่: ${moment().format('DD/MM/YYYY HH:mm')}\n` +
-                `━━━━━━━━━━━━━━━━━\n` +
-                `⏳ สถานะ: รอจัดทำหนังสือตอบรับ`
-            );
-
-            // ส่งแจ้งเตือนไป Admin
-await notifyAdmins(
-    '📢 มีคำร้องใหม่!',
-    `<p><strong>เลขที่คำร้อง:</strong> ${requestNumber}</p>
-     <p><strong>นักศึกษา:</strong> ${requestData.prefix}${requestData.firstName} ${requestData.lastName}</p>
-     <p><strong>รหัสนักศึกษา:</strong> ${requestData.studentId}</p>
-     <p><strong>สถานที่ฝึก:</strong> ${requestData.companyName}</p>
-     <p><strong>เบอร์โทร:</strong> ${requestData.phone}</p>
-     <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin.html" 
-           style="background:#4f46e5;color:white;padding:8px 16px;border-radius:4px;text-decoration:none;">
-           ไปที่ระบบ Admin
-        </a></p>`
-);
-
-// แจ้งเตือนนักศึกษา
-await notifyStudent(
-    requestData.email || '',  // ต้องเพิ่มฟิลด์ email ในฟอร์ม
-    `${requestData.prefix}${requestData.firstName} ${requestData.lastName}`,
-    'ยื่นคำร้องสำเร็จ',
-    `<p><strong>เลขที่คำร้อง:</strong> ${requestNumber}</p>
-     <p><strong>สถานะ:</strong> ⏳ รอจัดทำหนังสือตอบรับ</p>
-     <p>ระบบจะแจ้งเตือนเมื่อ Admin ดำเนินการแล้ว</p>`
-);
-
-            res.json({
-                success: true,
-                message: 'ยื่นคำร้องสำเร็จ',
-                data: {
-                    requestNumber,
-                    status: '⏳ รอจัดทำหนังสือตอบรับ'
-                }
-            });
-        } catch (error) {
-            console.error('Create request error:', error);
-            res.status(500).json({
+    try {
+        const requestData = req.body;
+        
+        const validation = validateRequest(requestData);
+        if (!validation.isValid) {
+            return res.status(400).json({
                 success: false,
-                message: 'เกิดข้อผิดพลาดในการยื่นคำร้อง'
+                errors: validation.errors
             });
         }
+
+        const hasIncomplete = await sheetsService.hasIncompleteRequest(requestData.studentId);
+        if (hasIncomplete) {
+            return res.status(400).json({
+                success: false,
+                message: 'มีคำร้องที่ยังไม่เสร็จสิ้นสำหรับรหัสนักศึกษานี้'
+            });
+        }
+
+        const existingData = await sheetsService.getSheetData('คำร้องขอฝึกประสบการณ์!A:A');
+        const count = existingData.length - 1;
+        const year = moment().format('YYYY');
+        const requestNumber = generateRequestNumber(year, count);
+
+        const timestamp = moment().toISOString();
+        const row = [
+            requestNumber,
+            requestData.studentId,
+            requestData.prefix,
+            requestData.firstName,
+            requestData.lastName,
+            requestData.phone,
+            requestData.level,
+            requestData.major,
+            requestData.system,
+            requestData.companyName,
+            requestData.contactPerson,
+            requestData.address.number,
+            requestData.address.building,
+            requestData.address.village,
+            requestData.address.street,
+            requestData.address.subDistrict,
+            requestData.address.district,
+            requestData.address.province,
+            requestData.address.postalCode,
+            timestamp,
+            '⏳ รอจัดทำหนังสือตอบรับ',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            'เปิดแก้ไข',
+            year,
+            requestData.email || '',
+            'ยังไม่แจ้ง'
+        ];
+
+        // ✅ บันทึกข้อมูลก่อน
+        await sheetsService.appendData('คำร้องขอฝึกประสบการณ์!A:AH', row);
+
+        // ✅ บันทึกประวัติ
+        await logService.addLog(
+            requestNumber,
+            'ยื่นคำร้อง',
+            `นักศึกษา ${requestData.prefix}${requestData.firstName} ${requestData.lastName} (${requestData.studentId}) ยื่นคำร้องขอฝึกประสบการณ์`,
+            `student-${requestData.studentId}`
+        );
+
+        // ✅ ตอบกลับทันที (ไม่รออีเมล)
+        res.json({
+            success: true,
+            message: 'ยื่นคำร้องสำเร็จ',
+            data: {
+                requestNumber,
+                status: '⏳ รอจัดทำหนังสือตอบรับ'
+            }
+        });
+
+        // ✅ ส่งอีเมลแบบ Background (ไม่รอ)
+        sendEmailInBackground(requestData, requestNumber);
+
+    } catch (error) {
+        console.error('Create request error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'เกิดข้อผิดพลาดในการยื่นคำร้อง'
+        });
     }
+}
 
     // ==========================================================
     // 2. ดึงข้อมูลคำร้องทั้งหมด (Admin)
@@ -897,6 +869,47 @@ async function getStudentInfo(studentId) {
     } catch (error) {
         console.error('Error getting student info:', error);
         return null;
+    }
+}
+// ============================================================
+//  Send Email in Background (ไม่รอผลลัพธ์)
+// ============================================================
+async function sendEmailInBackground(requestData, requestNumber) {
+    try {
+        const { notifyAdmins, notifyStudent } = require('../services/emailService');
+        
+        console.log(`📧 เริ่มส่งอีเมลสำหรับคำร้อง ${requestNumber}`);
+        
+        // ส่งหานักศึกษา
+        try {
+            await notifyStudent(
+                requestData.email,
+                `${requestData.prefix}${requestData.firstName} ${requestData.lastName}`,
+                'ยื่นคำร้องสำเร็จ',
+                `<p><strong>เลขที่คำร้อง:</strong> ${requestNumber}</p>
+                 <p><strong>สถานะ:</strong> ⏳ รอจัดทำหนังสือตอบรับ</p>
+                 <p>ระบบจะแจ้งเตือนเมื่อ Admin ดำเนินการแล้ว</p>`
+            );
+            console.log(`✅ ส่งอีเมลหานักศึกษา ${requestData.email} สำเร็จ`);
+        } catch (emailError) {
+            console.error(`❌ ส่งอีเมลหานักศึกษาล้มเหลว:`, emailError.message);
+        }
+
+        // ส่งหา Admin
+        try {
+            await notifyAdmins(
+                '📢 มีคำร้องใหม่!',
+                `<p><strong>เลขที่คำร้อง:</strong> ${requestNumber}</p>
+                 <p><strong>นักศึกษา:</strong> ${requestData.prefix}${requestData.firstName} ${requestData.lastName}</p>
+                 <p><strong>รหัสนักศึกษา:</strong> ${requestData.studentId}</p>
+                 <p><strong>สถานที่ฝึก:</strong> ${requestData.companyName}</p>`
+            );
+            console.log(`✅ ส่งอีเมลหา Admin สำเร็จ`);
+        } catch (emailError) {
+            console.error(`❌ ส่งอีเมลหา Admin ล้มเหลว:`, emailError.message);
+        }
+    } catch (error) {
+        console.error('❌ Send email background error:', error);
     }
 }
 
