@@ -141,7 +141,17 @@ class RequestController {
                 status: '⏳ รอจัดทำหนังสือขอความอนุเคราะห์'
             }
         });
+const { notifyAdminNewRequest } = require('../services/lineService');
 
+// หลังบันทึกข้อมูลสำเร็จ
+await notifyAdminNewRequest({
+    requestNumber,
+    prefix: requestData.prefix,
+    firstName: requestData.firstName,
+    lastName: requestData.lastName,
+    studentId: requestData.studentId,
+    companyName: requestData.companyName
+});
         // ✅ ส่งอีเมลแบบ Background (ไม่รอ)
         sendEmailInBackground(requestData, requestNumber);
 
@@ -412,7 +422,16 @@ class RequestController {
                 `Admin อัปโหลดหนังสือขอความอนุเคราะห์ ${fileName}`,
                 'admin'
             );
+const { notifyStudentReady } = require('../services/lineService');
 
+// หลังบันทึกสำเร็จ
+const studentName = `${requestData[2]}${requestData[3]} ${requestData[4]}`; // คำนำหน้า+ชื่อ+นามสกุล
+await notifyStudentReady(
+    requestData[1], // studentId
+    studentName,
+    requestNumber,
+    'response'
+);
             // 🔔 ส่ง Line Notify
             await notifyAdmins(
     '📄 อัปโหลดหนังสือขอความอนุเคราะห์',
@@ -508,7 +527,17 @@ if (studentData) {
                 `นักศึกษา ${studentId} อัปโหลดหนังสือตอบรับจากบริษัท ${file.originalname}`,
                 `student-${studentId}`
             );
+const { notifyAdminStudentUpload } = require('../services/lineService');
 
+// หลังบันทึกสำเร็จ
+await notifyAdminStudentUpload({
+    requestNumber,
+    prefix: requestData.prefix,
+    firstName: requestData.firstName,
+    lastName: requestData.lastName,
+    studentId: requestData.studentId,
+    companyName: requestData.companyName
+});
             // 🔔 ส่ง Line Notify
             await sendLineNotify(
                 `📎 นักศึกษาอัปโหลดหนังสือตอบรับจากบริษัท\n` +
@@ -590,7 +619,16 @@ if (studentData) {
                 `Admin อัปโหลดหนังสือส่งตัว ${fileName}`,
                 'admin'
             );
+const { notifyStudentReady } = require('../services/lineService');
 
+// หลังบันทึกสำเร็จ
+const studentName = `${requestData[2]}${requestData[3]} ${requestData[4]}`;
+await notifyStudentReady(
+    requestData[1], // studentId
+    studentName,
+    requestNumber,
+    'referral'
+);
             // 🔔 ส่ง Line Notify
             // หลังจากอัปเดตสำเร็จ
 await notifyAdmins(
