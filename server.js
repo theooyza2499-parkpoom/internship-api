@@ -9,6 +9,7 @@ require('dotenv').config();
 const authRoutes = require('./src/routes/authRoutes');
 const requestRoutes = require('./src/routes/requestRoutes');
 const announcementRoutes = require('./src/routes/announcementRoutes');
+const lineRoutes = require('./src/routes/lineRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -82,6 +83,7 @@ if (process.env.NODE_ENV === 'production') {
 app.use('/api/auth', authRoutes);
 app.use('/api/requests', requestRoutes);
 app.use('/api/announcements', announcementRoutes);
+app.use('/api/line', lineRoutes); // ✅ เพิ่ม
 
 // ============================================================
 //  Health Check (สำหรับ Render และการทดสอบ)
