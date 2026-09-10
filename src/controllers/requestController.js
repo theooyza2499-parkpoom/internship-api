@@ -404,12 +404,12 @@ class RequestController {
             
             await sheetsService.updateCell('คำร้องขอฝึกประสบการณ์', rowIndex, 'V', uploadResult.webViewLink);
             await sheetsService.updateCell('คำร้องขอฝึกประสบการณ์', rowIndex, 'W', timestamp);
-            await sheetsService.updateCell('คำร้องขอฝึกประสบการณ์', rowIndex, 'U', '📄 หนังสือตอบรับพร้อมดาวน์โหลด');
+            await sheetsService.updateCell('คำร้องขอฝึกประสบการณ์', rowIndex, 'U', '📄 หนังสือขอความอนุเคราะห์พร้อมดาวน์โหลด');
 
             await logService.addLog(
                 requestNumber,
-                'อัปโหลดหนังสือตอบรับ',
-                `Admin อัปโหลดหนังสือตอบรับ ${fileName}`,
+                'อัปโหลดหนังสือขอความอนุเคราะห์',
+                `Admin อัปโหลดหนังสือขอความอนุเคราะห์ ${fileName}`,
                 'admin'
             );
 
@@ -655,8 +655,8 @@ if (studentData) {
 
             await logService.addLog(
                 requestNumber,
-                'ดาวน์โหลดหนังสือตอบรับ',
-                `นักศึกษา ${studentId} ดาวน์โหลดหนังสือตอบรับ`,
+                'ดาวน์โหลดหนังสือขอความอนุเคราะห์',
+                `นักศึกษา ${studentId} ดาวน์โหลดหนังสือขอความอนุเคราะห์`,
                 `student-${studentId}`
             );
 
@@ -675,7 +675,7 @@ if (studentData) {
 
             res.json({
                 success: true,
-                message: 'ดาวน์โหลดหนังสือตอบรับสำเร็จ',
+                message: 'ดาวน์โหลดหนังสือขอความอนุเคราะห์สำเร็จ',
                 data: { downloadUrl: fileUrl }
             });
         } catch (error) {
