@@ -3,15 +3,31 @@ const path = require('path');
 const https = require('https');
 
 // ============================================================
-//  โหลด Token จากไฟล์
+//  ตรวจสอบว่าอยู่ใน Production หรือ Local
 // ============================================================
-const CREDENTIALS_DIR = path.join(__dirname, '../../credentials');
+const isProduction = process.env.NODE_ENV === 'production';
 
+// ✅ Production: อ่านจาก /etc/secrets/
+// ✅ Local: อ่านจาก ./credentials/
+const CREDENTIALS_DIR = isProduction 
+    ? '/etc/secrets' 
+    : path.join(__dirname, '../../credentials');
+
+console.log(`📁 LINE Credentials Dir: ${CREDENTIALS_DIR}`);
+
+// ============================================================
+//  ฟังก์ชันอ่านไฟล์
+// ============================================================
 function readFile(filename, defaultValue = '') {
     try {
         const filePath = path.join(CREDENTIALS_DIR, filename);
+        
         if (fs.existsSync(filePath)) {
-            return fs.readFileSync(filePath, 'utf8').trim();
+            const content = fs.readFileSync(filePath, 'utf8').trim();
+            console.log(`✅ อ่านไฟล์ ${filename} สำเร็จ (${content.length} ตัวอักษร)`);
+            return content;
+        } else {
+            console.warn(`⚠️ ไม่พบไฟล์ ${filename} ที่ ${filePath}`);
         }
     } catch (error) {
         console.error(`❌ อ่านไฟล์ ${filename} ล้มเหลว:`, error.message);
@@ -21,8 +37,12 @@ function readFile(filename, defaultValue = '') {
 
 function writeFile(filename, content) {
     try {
-        const filePath = path.join(CREDENTIALS_DIR, filename);
+        // ✅ ถ้าเป็น Production ให้เขียนที่ /tmp (Render ไม่ให้เขียน /etc/secrets)
+        const dir = isProduction ? '/tmp' : CREDENTIALS_DIR;
+        const filePath = path.join(dir, filename);
+        
         fs.writeFileSync(filePath, content, 'utf8');
+        console.log(`💾 เขียนไฟล์ ${filename} สำเร็จ`);
         return true;
     } catch (error) {
         console.error(`❌ เขียนไฟล์ ${filename} ล้มเหลว:`, error.message);
@@ -30,25 +50,41 @@ function writeFile(filename, content) {
     }
 }
 
+function readJSONFile(filename, defaultValue = {}) {
+    try {
+        // ✅ ลองอ่านจาก 2 ที่
+        const dirs = isProduction 
+            ? ['/etc/secrets', '/tmp', CREDENTIALS_DIR]
+            : [CREDENTIALS_DIR];
+        
+        for (const dir of dirs) {
+            const filePath = path.join(dir, filename);
+            if (fs.existsSync(filePath)) {
+                const content = fs.readFileSync(filePath, 'utf8');
+                return JSON.parse(content);
+            }
+        }
+    } catch (error) {
+        console.error(`❌ อ่าน JSON ${filename} ล้มเหลว:`, error.message);
+    }
+    return defaultValue;
+}
+
+// ============================================================
+//  โหลด Credentials
+// ============================================================
 const LINE_TOKEN = readFile('token_line.txt');
 const LINE_CHANNEL_ID = readFile('channelID_line.txt');
 const ADMIN_USER_ID = readFile('userID_line.txt');
 
 // โหลด users ที่เคยแอด Bot
-let usersData = {};
-try {
-    const usersPath = path.join(CREDENTIALS_DIR, 'users_line.json');
-    if (fs.existsSync(usersPath)) {
-        usersData = JSON.parse(fs.readFileSync(usersPath, 'utf8'));
-    }
-} catch (error) {
-    console.error('❌ อ่าน users_line.json ล้มเหลว:', error.message);
-}
+let usersData = readJSONFile('users_line.json', {});
 
-console.log(`✅ โหลด LINE Token: ${LINE_TOKEN ? 'สำเร็จ' : 'ไม่พบ'}`);
-console.log(`✅ โหลด Channel ID: ${LINE_CHANNEL_ID || 'ไม่พบ'}`);
-console.log(`✅ โหลด Admin User ID: ${ADMIN_USER_ID || 'ไม่พบ'}`);
-console.log(`✅ โหลด Users: ${Object.keys(usersData).length} คน`);
+console.log(`📊 สรุป LINE Credentials:`);
+console.log(`   - Token: ${LINE_TOKEN ? '✅' : '❌'}`);
+console.log(`   - Channel ID: ${LINE_CHANNEL_ID ? '✅' : '❌'}`);
+console.log(`   - Admin User ID: ${ADMIN_USER_ID ? '✅' : '❌'}`);
+console.log(`   - Users: ${Object.keys(usersData).length} คน`);
 
 // ============================================================
 //  บันทึก User ID ของนักศึกษา
@@ -59,9 +95,17 @@ function saveUser(studentId, userId, displayName = '') {
         displayName: displayName,
         updatedAt: new Date().toISOString()
     };
-    const usersPath = path.join(CREDENTIALS_DIR, 'users_line.json');
-    fs.writeFileSync(usersPath, JSON.stringify(usersData, null, 2), 'utf8');
-    console.log(`💾 บันทึก User ID สำหรับ ${studentId}: ${userId}`);
+    
+    // ✅ เขียนลง /tmp บน Production
+    const dir = isProduction ? '/tmp' : CREDENTIALS_DIR;
+    const usersPath = path.join(dir, 'users_line.json');
+    
+    try {
+        fs.writeFileSync(usersPath, JSON.stringify(usersData, null, 2), 'utf8');
+        console.log(`💾 บันทึก User ID สำหรับ ${studentId}: ${userId}`);
+    } catch (error) {
+        console.error('❌ บันทึก users_line.json ล้มเหลว:', error.message);
+    }
 }
 
 // ============================================================
