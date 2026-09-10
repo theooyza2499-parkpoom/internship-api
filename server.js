@@ -235,6 +235,20 @@ app.get('/test-sheet', async (req, res) => {
     }
 });
 
+// Test Email Endpoint
+app.get('/test-email', async (req, res) => {
+    try {
+        const { sendEmail } = require('./src/services/emailService');
+        const result = await sendEmail({
+            to: 'your-test-email@gmail.com', // เปลี่ยนเป็นอีเมลของคุณ
+            subject: '🧪 ทดสอบระบบ Email',
+            html: '<h1>ทดสอบสำเร็จ!</h1><p>ระบบส่ง Email ทำงานได้ถูกต้อง</p>'
+        });
+        res.json({ success: true, result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 
 
