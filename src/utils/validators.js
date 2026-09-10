@@ -10,10 +10,10 @@ const generateRequestNumber = (year, count) => {
 const validateRequest = (data) => {
   const errors = [];
   
-  // ตรวจสอบรหัสนักศึกษา
-  if (!data.studentId || data.studentId.length < 8) {
-    errors.push('รหัสนักศึกษาต้องมีอย่างน้อย 8 ตัวอักษร');
-  }
+  // ตรวจสอบรหัสนักศึกษา (10 หรือ 11 หลัก)
+if (!data.studentId || !/^[0-9]{10,11}$/.test(data.studentId)) {
+    errors.push('รหัสนักศึกษาต้องเป็นตัวเลข 10 หรือ 11 หลัก');
+}
   
   // ตรวจสอบชื่อ-นามสกุล
   if (!data.firstName || data.firstName.length < 2) {
