@@ -138,7 +138,7 @@ class RequestController {
             message: 'ยื่นคำร้องสำเร็จ',
             data: {
                 requestNumber,
-                status: '⏳ รอจัดทำหนังสือตอบรับ'
+                status: '⏳ รอจัดทำหนังสือขอความอนุเคราะห์'
             }
         });
 
@@ -288,7 +288,7 @@ class RequestController {
                 });
             }
 
-            if (!isAdmin && currentRow[20] !== '⏳ รอจัดทำหนังสือตอบรับ') {
+            if (!isAdmin && currentRow[20] !== '⏳ รอจัดทำหนังสือขอความอนุเคราะห์') {
                 return res.status(403).json({
                     success: false,
                     message: 'ไม่สามารถแก้ไขข้อมูลได้ เนื่องจากอยู่ในขั้นตอนการดำเนินการแล้ว'
@@ -415,7 +415,7 @@ class RequestController {
 
             // 🔔 ส่ง Line Notify
             await notifyAdmins(
-    '📄 อัปโหลดหนังสือตอบรับ',
+    '📄 อัปโหลดหนังสือขอความอนุเคราะห์',
     `<p><strong>เลขที่คำร้อง:</strong> ${requestNumber}</p>
      <p><strong>ไฟล์:</strong> ${fileName}</p>
      <p><a href="${uploadResult.webViewLink}" target="_blank">ดูไฟล์</a></p>`
@@ -428,19 +428,19 @@ if (studentData) {
     await notifyStudent(
         studentData.email,
         studentData.name,
-        '📄 หนังสือตอบรับพร้อมให้ดาวน์โหลด',
+        '📄 หนังสือขอความอนุเคราะห์พร้อมให้ดาวน์โหลด',
         `<p><strong>เลขที่คำร้อง:</strong> ${requestNumber}</p>
          <p>หนังสือตอบรับพร้อมให้ดาวน์โหลดแล้ว</p>
          <p><a href="${uploadResult.webViewLink}" target="_blank"
                style="background:#10b981;color:white;padding:8px 16px;border-radius:4px;text-decoration:none;">
-               ดาวน์โหลดหนังสือตอบรับ
+               ดาวน์โหลดหนังสือขอความอนุเคราะห์
             </a></p>`
     );
 }
 
             res.json({
                 success: true,
-                message: 'อัปโหลดหนังสือตอบรับสำเร็จ',
+                message: 'อัปโหลดหนังสือขอความอนุเคราะห์สำเร็จ',
                 data: {
                     fileId: uploadResult.fileId,
                     link: uploadResult.webViewLink
