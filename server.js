@@ -10,6 +10,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const requestRoutes = require('./src/routes/requestRoutes');
 const announcementRoutes = require('./src/routes/announcementRoutes');
 const lineRoutes = require('./src/routes/lineRoutes');
+const addressService = require('./src/services/addressService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -61,7 +62,85 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // ============================================================
-//  5. Routes
+//  5. Address API (ต้องมาก่อน 404 Handler!)
+// ============================================================
+console.log('📍 ลงทะเบียน Address API');
+
+// ค้นหาจังหวัด
+app.get('/api/address/provinces', (req, res) => {
+    try {
+        const { keyword } = req.query;
+        const results = addressService.searchProvinces(keyword);
+        res.json({ success: true, data: results });
+    } catch (error) {
+        console.error('❌ Error provinces:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ค้นหาอำเภอ
+app.get('/api/address/districts', (req, res) => {
+    try {
+        const { province, keyword } = req.query;
+        if (!province) {
+            return res.status(400).json({ success: false, message: 'กรุณาระบุจังหวัด' });
+        }
+        const results = addressService.searchDistricts(province, keyword);
+        res.json({ success: true, data: results });
+    } catch (error) {
+        console.error('❌ Error districts:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ค้นหาตำบล
+app.get('/api/address/subdistricts', (req, res) => {
+    try {
+        const { province, district, keyword } = req.query;
+        if (!province || !district) {
+            return res.status(400).json({ success: false, message: 'กรุณาระบุจังหวัดและอำเภอ' });
+        }
+        const results = addressService.searchSubDistricts(province, district, keyword);
+        res.json({ success: true, data: results });
+    } catch (error) {
+        console.error('❌ Error subdistricts:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ค้นหารหัสไปรษณีย์
+app.get('/api/address/postalcode', (req, res) => {
+    try {
+        const { province, district, subDistrict } = req.query;
+        if (!province || !district || !subDistrict) {
+            return res.status(400).json({ success: false, message: 'กรุณาระบุข้อมูลให้ครบ' });
+        }
+        const postalCode = addressService.getPostalCode(province, district, subDistrict);
+        res.json({ success: true, data: postalCode });
+    } catch (error) {
+        console.error('❌ Error postalcode:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ค้นหาแบบเต็ม
+app.get('/api/address/search', (req, res) => {
+    try {
+        const { keyword } = req.query;
+        if (!keyword) {
+            return res.status(400).json({ success: false, message: 'กรุณาระบุคำค้น' });
+        }
+        const results = addressService.searchAll(keyword);
+        const limited = results.slice(0, 50);
+        res.json({ success: true, data: limited, total: results.length });
+    } catch (error) {
+        console.error('❌ Error search:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ============================================================
+//  6. Application Routes
 // ============================================================
 app.use('/api/auth', authRoutes);
 app.use('/api/requests', requestRoutes);
@@ -69,7 +148,7 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/line', lineRoutes);
 
 // ============================================================
-//  6. Health Check
+//  7. Health Check
 // ============================================================
 app.get('/health', (req, res) => {
     res.json({
@@ -81,7 +160,7 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================================
-//  7. Root Route
+//  8. Root Route
 // ============================================================
 app.get('/', (req, res) => {
     res.json({
@@ -94,16 +173,17 @@ app.get('/', (req, res) => {
             auth: '/api/auth/login',
             requests: '/api/requests',
             announcements: '/api/announcements',
-            line: '/api/line/webhook'
+            line: '/api/line/webhook',
+            address: '/api/address/provinces'
         }
     });
 });
 
 // ============================================================
-//  8. Test Endpoints
+//  9. Test Endpoints
 // ============================================================
 
-// ✅ Test LINE
+// Test LINE
 app.get('/test-line', async (req, res) => {
     try {
         const lineService = require('./src/services/lineService');
@@ -134,19 +214,16 @@ app.get('/test-line', async (req, res) => {
             res.json({
                 success: false,
                 info,
-                message: '⚠️ ไม่มี Admin User ID กรุณาตั้งค่า userID_line.txt'
+                message: '⚠️ ไม่มี Admin User ID'
             });
         }
     } catch (error) {
         console.error('❌ Test LINE Error:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// ✅ Test Sheet
+// Test Sheet
 app.get('/test-sheet', async (req, res) => {
     try {
         const { sheets, SPREADSHEET_ID } = require('./src/config/google');
@@ -161,14 +238,11 @@ app.get('/test-sheet', async (req, res) => {
         });
     } catch (error) {
         console.error('❌ Test Sheet Error:', error.message);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// ✅ Test Email
+// Test Email
 app.get('/test-email', async (req, res) => {
     try {
         const { sendEmail } = require('./src/services/emailService');
@@ -183,8 +257,23 @@ app.get('/test-email', async (req, res) => {
     }
 });
 
+// Test Address
+app.get('/test-address', (req, res) => {
+    try {
+        const provinces = addressService.searchProvinces('');
+        res.json({
+            success: true,
+            totalProvinces: provinces.length,
+            sample: provinces.slice(0, 5),
+            message: '✅ Address Service ทำงานปกติ'
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ============================================================
-//  9. 404 Handler
+//  10. 404 Handler (ต้องอยู่ท้ายสุด!)
 // ============================================================
 app.use((req, res) => {
     res.status(404).json({
@@ -194,7 +283,7 @@ app.use((req, res) => {
 });
 
 // ============================================================
-//  10. Error Handler
+//  11. Error Handler
 // ============================================================
 app.use((err, req, res, next) => {
     console.error('❌ Error:', err);
@@ -228,7 +317,7 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-//  11. Start Server
+//  12. Start Server
 // ============================================================
 app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
@@ -239,7 +328,7 @@ app.listen(PORT, () => {
 });
 
 // ============================================================
-//  12. Graceful Shutdown
+//  13. Graceful Shutdown
 // ============================================================
 process.on('SIGTERM', () => {
     console.log('🛑 SIGTERM received, shutting down gracefully...');
