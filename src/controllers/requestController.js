@@ -611,4 +611,22 @@ class RequestController {
             };
 
             const majorCount = {};
-            const level
+            const levelCount = {};
+            data.forEach(row => {
+                const major = row['สาขาวิชา'];
+                const level = row['ระดับชั้น'];
+                if (major) majorCount[major] = (majorCount[major] || 0) + 1;
+                if (level) levelCount[level] = (levelCount[level] || 0) + 1;
+            });
+            stats.byMajor = majorCount;
+            stats.byLevel = levelCount;
+
+            res.json({ success: true, data: stats });
+        } catch (error) {
+            console.error('Get dashboard stats error:', error);
+            res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
+        }
+    }
+}
+
+module.exports = new RequestController();
