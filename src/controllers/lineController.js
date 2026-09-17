@@ -8,28 +8,26 @@ class LineController {
     async webhook(req, res) {
         try {
             console.log('═══════════════════════════════════════════════════');
-            console.log('📩 LINE Webhook received at:', new Date().toISOString());
+            console.log(`📩 LINE Webhook received at: ${new Date().toISOString()}`);
             console.log('📦 Body:', JSON.stringify(req.body, null, 2));
             console.log('═══════════════════════════════════════════════════');
 
             const events = req.body.events || [];
             console.log(`📊 จำนวน Events: ${events.length}`);
 
-            // ✅ ตอบกลับ LINE ทันที (200 OK)
-            res.status(200).json({ success: true });
+            // ✅ ตอบกลับทันที (LINE ต้องการ response เร็ว)
+            res.json({ success: true });
 
-            // ✅ ประมวลผล Events ทีละอัน (แบบ Background)
+            // ✅ ประมวลผล Event แบบ Background
             for (const event of events) {
                 try {
                     await this.handleEvent(event);
-                } catch (err) {
-                    console.error('❌ Error handling event:', err.message);
+                } catch (error) {
+                    console.error('❌ Error handling event:', error.message);
                 }
             }
-
         } catch (error) {
             console.error('❌ Webhook error:', error);
-            // ถ้ายังไม่ตอบกลับ
             if (!res.headersSent) {
                 res.status(500).json({ success: false, error: error.message });
             }
@@ -40,70 +38,103 @@ class LineController {
     //  ประมวลผล Event แต่ละประเภท
     // ============================================================
     async handleEvent(event) {
-        console.log(`📩 Event type: ${event.type}`);
+        console.log(`📌 Event type: ${event.type}`);
+        console.log(`👤 User ID: ${event.source?.userId}`);
+
+        const userId = event.source?.userId;
+        const replyToken = event.replyToken;
 
         // ✅ เมื่อมีคนแอด Bot
         if (event.type === 'follow') {
-            const userId = event.source.userId;
-            const replyToken = event.replyToken;
-
-            console.log(`👤 มีผู้ใช้แอด Bot: ${userId}`);
-
-            await this.replyMessage(replyToken, 
+            console.log(`👋 มีผู้ใช้แอด Bot: ${userId}`);
+            
+            await this.replyMessage(replyToken,
                 'สวัสดีครับ! 🙏\n\n' +
-                '🤖 ผมคือบอทแจ้งเตือนระบบฝึกประสบการณ์\n\n' +
-                '📝 กรุณาพิมพ์รหัสนักศึกษาของคุณเพื่อลงทะเบียนรับการแจ้งเตือน\n\n' +
-                'ตัวอย่าง: 6412345678'
+                'ยินดีต้อนรับสู่ระบบแจ้งเตือนฝึกประสบการณ์\n\n' +
+                '📝 กรุณาพิมพ์ "รหัสนักศึกษา" ของคุณเพื่อลงทะเบียน\n' +
+                'ตัวอย่าง: 6412345678\n\n' +
+                '📢 เมื่อลงทะเบียนแล้ว คุณจะได้รับการแจ้งเตือนเมื่อเอกสารพร้อม'
             );
+            return;
         }
 
         // ✅ เมื่อมีคนส่งข้อความ
-        if (event.type === 'message' && event.message.type === 'text') {
-            const userId = event.source.userId;
+        if (event.type === 'message' && event.message?.type === 'text') {
             const text = event.message.text.trim();
-            const replyToken = event.replyToken;
-
             console.log(`💬 ข้อความจาก ${userId}: ${text}`);
 
             // ถ้าเป็นตัวเลข 10-11 หลัก = รหัสนักศึกษา
             if (/^[0-9]{10,11}$/.test(text)) {
                 const studentId = text;
+
+                // ✅ ตรวจสอบว่ามีนักศึกษานี้ในระบบหรือไม่
+                const sheetsService = require('../services/sheetsService');
+                const rowIndex = await sheetsService.findRowByStudentId(studentId);
+
+                if (!rowIndex) {
+                    await this.replyMessage(replyToken,
+                        `⚠️ ไม่พบรหัสนักศึกษา ${studentId} ในระบบ\n\n` +
+                        `กรุณายื่นคำร้องก่อน แล้วค่อยกลับมาลงทะเบียน`
+                    );
+                    return;
+                }
+
+                // ✅ ดึงข้อมูลโปรไฟล์
                 const profile = await this.getProfile(userId);
-                
-                // ✅ บันทึก User ID
-                lineService.saveUser(studentId, userId, profile.displayName || '');
-                
-                await this.replyMessage(replyToken,
-                    `✅ ลงทะเบียนสำเร็จ!\n\n` +
-                    `🆔 รหัสนักศึกษา: ${studentId}\n` +
-                    `👤 ชื่อ: ${profile.displayName || 'ไม่ระบุ'}\n\n` +
-                    `📢 คุณจะได้รับการแจ้งเตือนเมื่อเอกสารพร้อมดาวน์โหลด`
-                );
-            } else if (text === 'ทดสอบ' || text === 'test') {
-                await this.replyMessage(replyToken,
-                    `🧪 ทดสอบสำเร็จ!\n\n` +
-                    `📅 ${new Date().toLocaleString('th-TH')}\n` +
-                    `✅ บอททำงานปกติ`
-                );
+
+                // ✅ บันทึก User ID ลง Google Sheets (คอลัมน์ AI)
+                const saved = await lineService.saveUser(studentId, userId, profile.displayName || '');
+
+                if (saved) {
+                    await this.replyMessage(replyToken,
+                        `✅ ลงทะเบียนสำเร็จ!\n\n` +
+                        `🆔 รหัสนักศึกษา: ${studentId}\n` +
+                        `👤 ชื่อ: ${profile.displayName || 'ไม่ระบุ'}\n\n` +
+                        `📢 คุณจะได้รับการแจ้งเตือนเมื่อเอกสารพร้อมดาวน์โหลด`
+                    );
+                } else {
+                    await this.replyMessage(replyToken,
+                        `⚠️ ไม่สามารถบันทึกข้อมูลได้\n\n` +
+                        `กรุณาติดต่อ Admin`
+                    );
+                }
             } else {
                 await this.replyMessage(replyToken,
                     '⚠️ กรุณาพิมพ์รหัสนักศึกษา 10 หรือ 11 หลัก\n\n' +
-                    'ตัวอย่าง: 6412345678\n\n' +
-                    'หรือพิมพ์ "ทดสอบ" เพื่อทดสอบระบบ'
+                    'ตัวอย่าง: 6412345678'
                 );
             }
+            return;
         }
 
-        // ✅ เมื่อมีคนบล็อก Bot
+        // ✅ Event อื่นๆ
         if (event.type === 'unfollow') {
-            console.log(`👤 ผู้ใช้บล็อก Bot: ${event.source.userId}`);
+            console.log(`👋 ผู้ใช้บล็อก Bot: ${userId}`);
+            return;
         }
+
+        if (event.type === 'join') {
+            console.log(`➕ Bot เข้ากลุ่ม: ${event.source?.groupId}`);
+            return;
+        }
+
+        if (event.type === 'leave') {
+            console.log(`➖ Bot ออกจากกลุ่ม: ${event.source?.groupId}`);
+            return;
+        }
+
+        console.log(`ℹ️ ไม่ได้จัดการ Event type: ${event.type}`);
     }
 
     // ============================================================
     //  ตอบกลับข้อความ (Reply)
     // ============================================================
     async replyMessage(replyToken, message) {
+        if (!replyToken) {
+            console.warn('⚠️ ไม่มี replyToken');
+            return { success: false };
+        }
+
         const data = JSON.stringify({
             replyToken: replyToken,
             messages: [{ type: 'text', text: message }]
@@ -126,18 +157,13 @@ class LineController {
                 let body = '';
                 res.on('data', (chunk) => body += chunk);
                 res.on('end', () => {
-                    if (res.statusCode === 200) {
-                        console.log(`✅ Reply sent: ${res.statusCode}`);
-                        resolve({ success: true });
-                    } else {
-                        console.error(`❌ Reply failed: ${res.statusCode} - ${body}`);
-                        resolve({ success: false, error: body });
-                    }
+                    console.log(`✅ Reply sent: ${res.statusCode}`);
+                    resolve({ success: res.statusCode === 200 });
                 });
             });
             req.on('error', (error) => {
-                console.error('❌ Reply request error:', error.message);
-                resolve({ success: false, error: error.message });
+                console.error('❌ Reply error:', error.message);
+                resolve({ success: false });
             });
             req.write(data);
             req.end();
@@ -164,9 +190,7 @@ class LineController {
                 res.on('data', (chunk) => body += chunk);
                 res.on('end', () => {
                     try {
-                        const profile = JSON.parse(body);
-                        console.log(`👤 Profile: ${profile.displayName}`);
-                        resolve(profile);
+                        resolve(JSON.parse(body));
                     } catch {
                         resolve({});
                     }
