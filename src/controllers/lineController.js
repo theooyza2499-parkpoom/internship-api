@@ -15,7 +15,8 @@ class LineController {
     // ============================================================
     //  Webhook
     // ============================================================
-    async webhook(req, res) {
+    // ✅ Arrow function จะรักษา this อัตโนมัติ
+    webhook = async (req, res) => {
         try {
             console.log('═══════════════════════════════════════════════════');
             console.log(`📩 LINE Webhook received at: ${new Date().toISOString()}`);
@@ -48,7 +49,7 @@ class LineController {
     // ============================================================
     //  handleEvent
     // ============================================================
-    async handleEvent(event) {
+    handleEvent = async (event) => {
         console.log('🔥 handleEvent called:', event.type);
         console.log(`👤 User ID: ${event.source?.userId}`);
 
@@ -117,7 +118,7 @@ class LineController {
     // ============================================================
     //  replyMessage
     // ============================================================
-    async replyMessage(replyToken, message) {
+    replyMessage = async (replyToken, message) => {
         if (!replyToken) return { success: false };
 
         const data = JSON.stringify({
@@ -158,7 +159,7 @@ class LineController {
     // ============================================================
     //  getProfile
     // ============================================================
-    async getProfile(userId) {
+    getProfile = async (userId) => {
         const options = {
             hostname: 'api.line.me',
             port: 443,
