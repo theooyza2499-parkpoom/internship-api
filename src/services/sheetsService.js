@@ -123,22 +123,28 @@ class SheetsService {
 
   // ============================================================
   //  8. ค้นหาหมายเลขแถวตามรหัสนักศึกษา
+  //  ⚠️ อัปเดตให้รองรับคอลัมน์ถึง AI
   // ============================================================
   async findRowByStudentId(studentId) {
-    const data = await this.getSheetData('คำร้องขอฝึกประสบการณ์!A:AH');
-    for (let i = 0; i < data.length; i++) {
-      if (data[i][1] === studentId) { // คอลัมน์ B = รหัสนักศึกษา
-        return i + 1; // +1 เพราะ Sheets เริ่มที่ 1
+    try {
+      const data = await this.getSheetData('คำร้องขอฝึกประสบการณ์!A:AI');
+      for (let i = 0; i < data.length; i++) {
+        if (data[i][1] === studentId) { // คอลัมน์ B = รหัสนักศึกษา
+          return i + 1;
+        }
       }
+      return null;
+    } catch (error) {
+      console.error('Error finding row by student ID:', error);
+      return null;
     }
-    return null;
   }
 
   // ============================================================
   //  9. ค้นหาหมายเลขแถวตามเลขที่คำร้อง
   // ============================================================
   async findRowByRequestNumber(requestNumber) {
-    const data = await this.getSheetData('คำร้องขอฝึกประสบการณ์!A:AH');
+    const data = await this.getSheetData('คำร้องขอฝึกประสบการณ์!A:AI');
     for (let i = 0; i < data.length; i++) {
       if (data[i][0] === requestNumber) { // คอลัมน์ A = เลขที่คำร้อง
         return i + 1;
@@ -173,7 +179,8 @@ class SheetsService {
       level: student['ระดับชั้น'] || '',
       major: student['สาขาวิชา'] || '',
       requestNumber: student['เลขที่คำร้อง'] || '',
-      status: student['สถานะ'] || ''
+      status: student['สถานะ'] || '',
+      lineUserId: student['User ID LINE'] || ''
     };
   }
 
@@ -184,9 +191,88 @@ class SheetsService {
     const rowIndex = await this.findRowByStudentId(studentId);
     if (!rowIndex) return false;
     
-    // คอลัมน์ AH = แจ้งเตือนแล้ว (33 = AH)
+    // คอลัมน์ AH = แจ้งเตือนแล้ว
     await this.updateCell('คำร้องขอฝึกประสบการณ์', rowIndex, 'AH', status);
     return true;
+  }
+
+  // ============================================================
+  //  13. ดึง User ID LINE ของนักศึกษา (จากคอลัมน์ AI)
+  // ============================================================
+  async getLineUserId(studentId) {
+    try {
+      const rowIndex = await this.findRowByStudentId(studentId);
+      if (!rowIndex) {
+        console.warn(`⚠️ ไม่พบนักศึกษา ${studentId}`);
+        return null;
+      }
+
+      // ✅ อ่านคอลัมน์ AI (User ID LINE)
+      const data = await this.getSheetData(`คำร้องขอฝึกประสบการณ์!AI${rowIndex}`);
+      const userId = data && data[0] ? data[0][0] : null;
+      
+      if (userId && userId.startsWith('U')) {
+        return userId;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting LINE User ID:', error);
+      return null;
+    }
+  }
+
+  // ============================================================
+  //  14. บันทึก User ID LINE ของนักศึกษา (ลงคอลัมน์ AI)
+  // ============================================================
+  async saveLineUserId(studentId, lineUserId) {
+    try {
+      const rowIndex = await this.findRowByStudentId(studentId);
+      if (!rowIndex) {
+        console.warn(`⚠️ ไม่พบนักศึกษา ${studentId}`);
+        return false;
+      }
+
+      // ✅ บันทึกลงคอลัมน์ AI (User ID LINE)
+      await this.updateCell('คำร้องขอฝึกประสบการณ์', rowIndex, 'AI', lineUserId);
+      
+      console.log(`💾 บันทึก User ID LINE สำหรับ ${studentId}: ${lineUserId.substring(0, 10)}...`);
+      return true;
+    } catch (error) {
+      console.error('Error saving LINE User ID:', error);
+      return false;
+    }
+  }
+
+  // ============================================================
+  //  15. ดึงข้อมูลคำร้องตามเลขที่คำร้อง (สำหรับ LINE)
+  // ============================================================
+  async getRequestByNumber(requestNumber) {
+    try {
+      const data = await this.getSheetData('คำร้องขอฝึกประสบการณ์!A:AI');
+      for (const row of data) {
+        if (row[0] === requestNumber) {
+          return {
+            requestNumber: row[0],
+            studentId: row[1],
+            prefix: row[2],
+            firstName: row[3],
+            lastName: row[4],
+            phone: row[5],
+            level: row[6],
+            major: row[7],
+            system: row[8],
+            companyName: row[9],
+            contactPerson: row[10],
+            status: row[20],
+            lineUserId: row[34] || '' // คอลัมน์ AI = index 34
+          };
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting request by number:', error);
+      return null;
+    }
   }
 }
 
