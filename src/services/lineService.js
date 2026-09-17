@@ -93,11 +93,58 @@ function saveUser(studentId, userId, displayName = '') {
     }
 }
 
+// ✅ เพิ่มฟังก์ชันบันทึก User ID ลง Google Sheets
+async function saveUserToSheet(studentId, userId, displayName = '') {
+    try {
+        const sheetsService = require('./sheetsService');
+        const data = await sheetsService.getSheetDataWithHeaders('คำร้องขอฝึกประสบการณ์');
+        const row = data.find(r => r['รหัสนักศึกษา'] === studentId);
+        
+        if (!row) {
+            console.warn(`⚠️ ไม่พบนักศึกษา ${studentId}`);
+            return false;
+        }
+        
+        // ✅ อัปเดตคอลัมน์ AG หรือ AH
+        const rowIndex = await sheetsService.findRowByStudentId(studentId);
+        await sheetsService.updateCell('คำร้องขอฝึกประสบการณ์', rowIndex, 'AG', userId);
+        
+        console.log(`💾 บันทึก User ID ลง Sheets: ${studentId} → ${userId}`);
+        return true;
+    } catch (error) {
+        console.error('❌ บันทึก User ID ลง Sheets ล้มเหลว:', error.message);
+        return false;
+    }
+}
+
 // ============================================================
 //  ดึง User ID ของนักศึกษา
 // ============================================================
-function getUserByStudentId(studentId) {
-    return usersData[studentId] ? usersData[studentId].userId : null;
+async function getUserByStudentId(studentId) {
+    // ✅ ลองอ่านจาก Memory ก่อน
+    if (usersData[studentId]) {
+        return usersData[studentId].userId;
+    }
+    
+    // ✅ ถ้าไม่เจอ อ่านจาก Google Sheets
+    try {
+        const sheetsService = require('./sheetsService');
+        const data = await sheetsService.getSheetDataWithHeaders('คำร้องขอฝึกประสบการณ์');
+        const row = data.find(r => r['รหัสนักศึกษา'] === studentId);
+        
+        if (row && row['อีเมล']) {
+            // สมมติว่าเก็บ User ID ในคอลัมน์ AG
+            const userId = row['User ID LINE'] || null;
+            if (userId) {
+                usersData[studentId] = { userId, displayName: row['ชื่อ'] };
+                return userId;
+            }
+        }
+    } catch (error) {
+        console.error('Error reading User ID from Sheets:', error.message);
+    }
+    
+    return null;
 }
 
 // ============================================================
