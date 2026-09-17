@@ -1,9 +1,12 @@
 const lineService = require('../services/lineService');
 const https = require('https');
 
+// ✅ ตรวจสอบเวอร์ชัน
+console.log('🔥 lineController.js version: 2026-09-17-v3');
+
 class LineController {
     // ============================================================
-    //  Webhook สำหรับรับ Event จาก LINE
+    //  Webhook
     // ============================================================
     async webhook(req, res) {
         try {
@@ -15,15 +18,16 @@ class LineController {
             const events = req.body.events || [];
             console.log(`📊 จำนวน Events: ${events.length}`);
 
-            // ✅ ตอบกลับทันที (LINE ต้องการ response เร็ว)
+            // ✅ ตอบกลับทันที
             res.json({ success: true });
 
-            // ✅ ประมวลผล Event แบบ Background
+            // ✅ ประมวลผลทีละ Event
             for (const event of events) {
                 try {
                     await this.handleEvent(event);
                 } catch (error) {
                     console.error('❌ Error handling event:', error.message);
+                    console.error('Stack:', error.stack);
                 }
             }
         } catch (error) {
@@ -35,16 +39,16 @@ class LineController {
     }
 
     // ============================================================
-    //  ประมวลผล Event แต่ละประเภท
+    //  handleEvent
     // ============================================================
     async handleEvent(event) {
-        console.log(`📌 Event type: ${event.type}`);
+        console.log('🔥 handleEvent called:', event.type);
         console.log(`👤 User ID: ${event.source?.userId}`);
 
         const userId = event.source?.userId;
         const replyToken = event.replyToken;
 
-        // ✅ เมื่อมีคนแอด Bot
+        // ✅ Follow
         if (event.type === 'follow') {
             console.log(`👋 มีผู้ใช้แอด Bot: ${userId}`);
             
@@ -52,88 +56,62 @@ class LineController {
                 'สวัสดีครับ! 🙏\n\n' +
                 'ยินดีต้อนรับสู่ระบบแจ้งเตือนฝึกประสบการณ์\n\n' +
                 '📝 กรุณาพิมพ์ "รหัสนักศึกษา" ของคุณเพื่อลงทะเบียน\n' +
-                'ตัวอย่าง: 6412345678\n\n' +
-                '📢 เมื่อลงทะเบียนแล้ว คุณจะได้รับการแจ้งเตือนเมื่อเอกสารพร้อม'
+                'ตัวอย่าง: 6412345678'
             );
             return;
         }
 
-        // ✅ เมื่อมีคนส่งข้อความ
+        // ✅ Message
         if (event.type === 'message' && event.message?.type === 'text') {
             const text = event.message.text.trim();
             console.log(`💬 ข้อความจาก ${userId}: ${text}`);
 
-            // ถ้าเป็นตัวเลข 10-11 หลัก = รหัสนักศึกษา
             if (/^[0-9]{10,11}$/.test(text)) {
                 const studentId = text;
-
-                // ✅ ตรวจสอบว่ามีนักศึกษานี้ในระบบหรือไม่
                 const sheetsService = require('../services/sheetsService');
                 const rowIndex = await sheetsService.findRowByStudentId(studentId);
 
                 if (!rowIndex) {
                     await this.replyMessage(replyToken,
                         `⚠️ ไม่พบรหัสนักศึกษา ${studentId} ในระบบ\n\n` +
-                        `กรุณายื่นคำร้องก่อน แล้วค่อยกลับมาลงทะเบียน`
+                        `กรุณายื่นคำร้องก่อน`
                     );
                     return;
                 }
 
-                // ✅ ดึงข้อมูลโปรไฟล์
                 const profile = await this.getProfile(userId);
-
-                // ✅ บันทึก User ID ลง Google Sheets (คอลัมน์ AI)
                 const saved = await lineService.saveUser(studentId, userId, profile.displayName || '');
 
                 if (saved) {
                     await this.replyMessage(replyToken,
                         `✅ ลงทะเบียนสำเร็จ!\n\n` +
-                        `🆔 รหัสนักศึกษา: ${studentId}\n` +
-                        `👤 ชื่อ: ${profile.displayName || 'ไม่ระบุ'}\n\n` +
-                        `📢 คุณจะได้รับการแจ้งเตือนเมื่อเอกสารพร้อมดาวน์โหลด`
+                        `🆔 รหัส: ${studentId}\n` +
+                        `👤 ชื่อ: ${profile.displayName || 'ไม่ระบุ'}`
                     );
                 } else {
                     await this.replyMessage(replyToken,
-                        `⚠️ ไม่สามารถบันทึกข้อมูลได้\n\n` +
-                        `กรุณาติดต่อ Admin`
+                        `⚠️ ไม่สามารถบันทึกข้อมูลได้ กรุณาติดต่อ Admin`
                     );
                 }
             } else {
                 await this.replyMessage(replyToken,
-                    '⚠️ กรุณาพิมพ์รหัสนักศึกษา 10 หรือ 11 หลัก\n\n' +
+                    '⚠️ กรุณาพิมพ์รหัสนักศึกษา 10 หรือ 11 หลัก\n' +
                     'ตัวอย่าง: 6412345678'
                 );
             }
             return;
         }
 
-        // ✅ Event อื่นๆ
         if (event.type === 'unfollow') {
             console.log(`👋 ผู้ใช้บล็อก Bot: ${userId}`);
-            return;
         }
-
-        if (event.type === 'join') {
-            console.log(`➕ Bot เข้ากลุ่ม: ${event.source?.groupId}`);
-            return;
-        }
-
-        if (event.type === 'leave') {
-            console.log(`➖ Bot ออกจากกลุ่ม: ${event.source?.groupId}`);
-            return;
-        }
-
-        console.log(`ℹ️ ไม่ได้จัดการ Event type: ${event.type}`);
     }
 
     // ============================================================
-    //  ตอบกลับข้อความ (Reply)
+    //  replyMessage
     // ============================================================
     async replyMessage(replyToken, message) {
-        if (!replyToken) {
-            console.warn('⚠️ ไม่มี replyToken');
-            return { success: false };
-        }
+        if (!replyToken) return { success: false };
 
         const data = JSON.stringify({
             replyToken: replyToken,
@@ -171,7 +149,7 @@ class LineController {
     }
 
     // ============================================================
-    //  ดึงข้อมูลโปรไฟล์ผู้ใช้
+    //  getProfile
     // ============================================================
     async getProfile(userId) {
         const options = {
