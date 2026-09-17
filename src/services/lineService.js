@@ -6,7 +6,9 @@ const https = require('https');
 //  ตรวจสอบ Environment
 // ============================================================
 const isProduction = process.env.NODE_ENV === 'production';
-const CREDENTIALS_DIR = isProduction ? '/etc/secrets' : path.join(__dirname, '../../credentials');
+const CREDENTIALS_DIR = isProduction 
+    ? '/etc/secrets' 
+    : path.join(__dirname, '../../credentials');
 
 console.log(`📁 LINE Credentials Dir: ${CREDENTIALS_DIR}`);
 
@@ -20,10 +22,29 @@ function readFile(filename, defaultValue = '') {
             const content = fs.readFileSync(filePath, 'utf8').trim();
             console.log(`✅ อ่านไฟล์ ${filename} สำเร็จ (${content.length} ตัวอักษร)`);
             return content;
+        } else {
+            console.warn(`⚠️ ไม่พบไฟล์ ${filename}`);
         }
-        console.warn(`⚠️ ไม่พบไฟล์ ${filename}`);
     } catch (error) {
         console.error(`❌ อ่านไฟล์ ${filename} ล้มเหลว:`, error.message);
+    }
+    return defaultValue;
+}
+
+function readJSONFile(filename, defaultValue = {}) {
+    try {
+        const dirs = isProduction 
+            ? ['/etc/secrets', '/tmp', CREDENTIALS_DIR]
+            : [CREDENTIALS_DIR];
+        
+        for (const dir of dirs) {
+            const filePath = path.join(dir, filename);
+            if (fs.existsSync(filePath)) {
+                return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            }
+        }
+    } catch (error) {
+        console.error(`❌ อ่าน JSON ${filename} ล้มเหลว:`, error.message);
     }
     return defaultValue;
 }
@@ -35,16 +56,16 @@ const LINE_TOKEN = readFile('token_line.txt');
 const LINE_CHANNEL_ID = readFile('channelID_line.txt');
 const ADMIN_USER_ID = readFile('userID_line.txt');
 
-// ✅ เก็บ User ID ใน memory (เป็น cache)
-let usersData = {};
+let usersData = readJSONFile('users_line.json', {});
 
 console.log(`📊 สรุป LINE Credentials:`);
 console.log(`   - Token: ${LINE_TOKEN ? '✅' : '❌'}`);
 console.log(`   - Channel ID: ${LINE_CHANNEL_ID ? '✅' : '❌'}`);
 console.log(`   - Admin User ID: ${ADMIN_USER_ID ? '✅' : '❌'}`);
+console.log(`   - Users: ${Object.keys(usersData).length} คน`);
 
 // ============================================================
-//  บันทึก User ID (memory)
+//  บันทึก User ID ของนักศึกษา
 // ============================================================
 function saveUser(studentId, userId, displayName = '') {
     usersData[studentId] = {
@@ -52,66 +73,38 @@ function saveUser(studentId, userId, displayName = '') {
         displayName: displayName,
         updatedAt: new Date().toISOString()
     };
-    console.log(`💾 บันทึก User ID (memory) สำหรับ ${studentId}: ${userId}`);
-    return true;
+    
+    const dir = isProduction ? '/tmp' : CREDENTIALS_DIR;
+    const usersPath = path.join(dir, 'users_line.json');
+    
+    try {
+        fs.writeFileSync(usersPath, JSON.stringify(usersData, null, 2), 'utf8');
+        console.log(`💾 บันทึก User ID สำหรับ ${studentId}: ${userId}`);
+        return true;
+    } catch (error) {
+        console.error('❌ บันทึก users_line.json ล้มเหลว:', error.message);
+        return false;
+    }
 }
 
 // ============================================================
-//  ดึง User ID (memory)
+//  ดึง User ID ของนักศึกษา
 // ============================================================
 function getUserByStudentId(studentId) {
-    if (usersData[studentId]) {
-        return usersData[studentId].userId;
-    }
-    return null;
+    return usersData[studentId] ? usersData[studentId].userId : null;
 }
 
 // ============================================================
-//  ดึง User ID จาก Google Sheets (ถาวร)
-// ============================================================
-async function getUserIdFromSheet(studentId) {
-    try {
-        const sheetsService = require('./sheetsService');
-        const data = await sheetsService.getSheetData('คำร้องขอฝึกประสบการณ์!A:AI');
-        
-        for (let i = 0; i < data.length; i++) {
-            // คอลัมน์ B (index 1) = รหัสนักศึกษา
-            // คอลัมน์ AI (index 34) = User ID LINE
-            if (data[i][1] === studentId) {
-                const userId = data[i][34]; // AI = index 34
-                if (userId && userId.trim() !== '') {
-                    console.log(`✅ พบ User ID จาก Sheets: ${userId}`);
-                    // ✅ cache ไว้ใน memory
-                    usersData[studentId] = { userId, displayName: '', updatedAt: new Date().toISOString() };
-                    return userId.trim();
-                }
-                break;
-            }
-        }
-        console.log(`⚠️ ไม่พบ User ID สำหรับ ${studentId} ใน Sheets`);
-        return null;
-    } catch (error) {
-        console.error('❌ Error getting user ID from sheet:', error.message);
-        return null;
-    }
-}
-
-// ============================================================
-//  ส่งข้อความผ่าน LINE Messaging API
+//  ส่งข้อความผ่าน LINE
 // ============================================================
 async function sendLineMessage(userId, message) {
     if (!LINE_TOKEN) {
-        console.warn('⚠️ ไม่มี LINE Token');
         return { success: false, error: 'No LINE Token' };
     }
     
     if (!userId) {
-        console.warn('⚠️ ไม่มี User ID');
         return { success: false, error: 'No User ID' };
     }
-
-    console.log(`📤 กำลังส่ง LINE ไปที่: ${userId}`);
-    console.log(`📝 ข้อความ: ${message.substring(0, 80)}...`);
 
     const data = JSON.stringify({
         to: userId,
@@ -137,19 +130,17 @@ async function sendLineMessage(userId, message) {
             res.on('end', () => {
                 if (res.statusCode === 200) {
                     console.log(`✅ ส่ง LINE สำเร็จ (${userId})`);
-                    resolve({ success: true, statusCode: res.statusCode });
+                    resolve({ success: true });
                 } else {
                     console.error(`❌ ส่ง LINE ล้มเหลว: ${res.statusCode} - ${body}`);
-                    resolve({ success: false, statusCode: res.statusCode, error: body });
+                    resolve({ success: false, error: body });
                 }
             });
         });
-
         req.on('error', (error) => {
-            console.error('❌ LINE request error:', error.message);
+            console.error('❌ LINE error:', error.message);
             resolve({ success: false, error: error.message });
         });
-
         req.write(data);
         req.end();
     });
@@ -160,7 +151,6 @@ async function sendLineMessage(userId, message) {
 // ============================================================
 async function notifyAdminNewRequest(requestData) {
     if (!ADMIN_USER_ID) {
-        console.warn('⚠️ ไม่มี Admin User ID');
         return { success: false, error: 'No Admin User ID' };
     }
 
@@ -169,18 +159,16 @@ async function notifyAdminNewRequest(requestData) {
         `👤 นักศึกษา: ${requestData.prefix}${requestData.firstName} ${requestData.lastName}\n` +
         `🆔 รหัส: ${requestData.studentId}\n` +
         `🏢 สถานที่: ${requestData.companyName}\n` +
-        `📅 ${new Date().toLocaleString('th-TH')}`;
+        `📅 วันที่: ${new Date().toLocaleString('th-TH')}`;
 
-    console.log(`🔔 กำลังแจ้งเตือน Admin: ${message.substring(0, 50)}...`);
     return await sendLineMessage(ADMIN_USER_ID, message);
 }
 
 // ============================================================
-//  แจ้งเตือน Admin (นักศึกษาอัปโหลดเอกสารตอบกลับ)
+//  แจ้งเตือน Admin (นักศึกษาอัปโหลดเอกสาร)
 // ============================================================
 async function notifyAdminStudentUpload(requestData) {
     if (!ADMIN_USER_ID) {
-        console.warn('⚠️ ไม่มี Admin User ID');
         return { success: false, error: 'No Admin User ID' };
     }
 
@@ -189,9 +177,8 @@ async function notifyAdminStudentUpload(requestData) {
         `👤 นักศึกษา: ${requestData.prefix}${requestData.firstName} ${requestData.lastName}\n` +
         `🆔 รหัส: ${requestData.studentId}\n` +
         `🏢 สถานที่: ${requestData.companyName}\n` +
-        `📅 ${new Date().toLocaleString('th-TH')}`;
+        `📅 วันที่: ${new Date().toLocaleString('th-TH')}`;
 
-    console.log(`🔔 กำลังแจ้งเตือน Admin: ${message.substring(0, 50)}...`);
     return await sendLineMessage(ADMIN_USER_ID, message);
 }
 
@@ -199,20 +186,11 @@ async function notifyAdminStudentUpload(requestData) {
 //  แจ้งเตือนนักศึกษา (เอกสารพร้อมดาวน์โหลด)
 // ============================================================
 async function notifyStudentReady(studentId, studentName, requestNumber, docType) {
-    console.log(`\n🔔 กำลังแจ้งเตือนนักศึกษา ${studentId}`);
-    
-    // ✅ ลองดึงจาก memory ก่อน
-    let userId = getUserByStudentId(studentId);
-    
-    // ✅ ถ้าไม่มี ให้ดึงจาก Google Sheets
-    if (!userId) {
-        console.log('⚠️ ไม่พบใน memory กำลังดึงจาก Google Sheets...');
-        userId = await getUserIdFromSheet(studentId);
-    }
+    const userId = getUserByStudentId(studentId);
     
     if (!userId) {
         console.warn(`⚠️ ไม่พบ User ID สำหรับนักศึกษา ${studentId}`);
-        return { success: false, error: 'No User ID for student' };
+        return { success: false, error: 'No User ID' };
     }
 
     const docName = docType === 'response' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัว';
@@ -220,10 +198,9 @@ async function notifyStudentReady(studentId, studentName, requestNumber, docType
         `📋 เลขที่คำร้อง: ${requestNumber}\n` +
         `👤 นักศึกษา: ${studentName}\n` +
         `📄 เอกสาร: ${docName}\n` +
-        `📅 ${new Date().toLocaleString('th-TH')}\n\n` +
+        `📅 วันที่: ${new Date().toLocaleString('th-TH')}\n\n` +
         `📥 กรุณาดาวน์โหลดที่ระบบ`;
 
-    console.log(`🔔 ส่งหานักศึกษา: ${userId}`);
     return await sendLineMessage(userId, message);
 }
 
@@ -234,7 +211,6 @@ module.exports = {
     usersData,
     saveUser,
     getUserByStudentId,
-    getUserIdFromSheet,
     sendLineMessage,
     notifyAdminNewRequest,
     notifyAdminStudentUpload,
