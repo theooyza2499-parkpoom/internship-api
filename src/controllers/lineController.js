@@ -1,4 +1,5 @@
 const lineService = require('../services/lineService');
+const https = require('https');
 
 class LineController {
     // ============================================================
@@ -6,17 +7,17 @@ class LineController {
     // ============================================================
     async webhook(req, res) {
         try {
+            console.log('📩 LINE Webhook received');
             const events = req.body.events || [];
             
             for (const event of events) {
-                console.log('📩 LINE Event:', JSON.stringify(event, null, 2));
+                console.log('📩 Event type:', event.type);
 
                 // ✅ เมื่อมีคนแอด Bot
                 if (event.type === 'follow') {
                     const userId = event.source.userId;
                     const replyToken = event.replyToken;
 
-                    // ตอบกลับขอรหัสนักศึกษา
                     await this.replyMessage(replyToken, 
                         'สวัสดีครับ! 🙏\n\n' +
                         'กรุณาพิมพ์รหัสนักศึกษาของคุณเพื่อลงทะเบียนรับการแจ้งเตือน\n\n' +
@@ -33,11 +34,8 @@ class LineController {
                     // ถ้าเป็นตัวเลข 10-11 หลัก = รหัสนักศึกษา
                     if (/^[0-9]{10,11}$/.test(text)) {
                         const studentId = text;
-                        
-                        // ดึงข้อมูลโปรไฟล์
                         const profile = await this.getProfile(userId);
                         
-                        // บันทึก User ID
                         lineService.saveUser(studentId, userId, profile.displayName || '');
                         
                         await this.replyMessage(replyToken,
@@ -66,13 +64,9 @@ class LineController {
     //  ตอบกลับข้อความ (Reply)
     // ============================================================
     async replyMessage(replyToken, message) {
-        const https = require('https');
         const data = JSON.stringify({
             replyToken: replyToken,
-            messages: [{
-                type: 'text',
-                text: message
-            }]
+            messages: [{ type: 'text', text: message }]
         });
 
         const options = {
@@ -97,7 +91,7 @@ class LineController {
                 });
             });
             req.on('error', (error) => {
-                console.error('❌ Reply error:', error);
+                console.error('❌ Reply error:', error.message);
                 resolve({ success: false });
             });
             req.write(data);
@@ -109,7 +103,6 @@ class LineController {
     //  ดึงข้อมูลโปรไฟล์ผู้ใช้
     // ============================================================
     async getProfile(userId) {
-        const https = require('https');
         const options = {
             hostname: 'api.line.me',
             port: 443,
