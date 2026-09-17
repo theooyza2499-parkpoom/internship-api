@@ -35,24 +35,8 @@ function readFile(filename, defaultValue = '') {
     return defaultValue;
 }
 
-function writeFile(filename, content) {
-    try {
-        // ✅ ถ้าเป็น Production ให้เขียนที่ /tmp (Render ไม่ให้เขียน /etc/secrets)
-        const dir = isProduction ? '/tmp' : CREDENTIALS_DIR;
-        const filePath = path.join(dir, filename);
-        
-        fs.writeFileSync(filePath, content, 'utf8');
-        console.log(`💾 เขียนไฟล์ ${filename} สำเร็จ`);
-        return true;
-    } catch (error) {
-        console.error(`❌ เขียนไฟล์ ${filename} ล้มเหลว:`, error.message);
-        return false;
-    }
-}
-
 function readJSONFile(filename, defaultValue = {}) {
     try {
-        // ✅ ลองอ่านจาก 2 ที่
         const dirs = isProduction 
             ? ['/etc/secrets', '/tmp', CREDENTIALS_DIR]
             : [CREDENTIALS_DIR];
@@ -96,15 +80,16 @@ function saveUser(studentId, userId, displayName = '') {
         updatedAt: new Date().toISOString()
     };
     
-    // ✅ เขียนลง /tmp บน Production
     const dir = isProduction ? '/tmp' : CREDENTIALS_DIR;
     const usersPath = path.join(dir, 'users_line.json');
     
     try {
         fs.writeFileSync(usersPath, JSON.stringify(usersData, null, 2), 'utf8');
         console.log(`💾 บันทึก User ID สำหรับ ${studentId}: ${userId}`);
+        return true;
     } catch (error) {
         console.error('❌ บันทึก users_line.json ล้มเหลว:', error.message);
+        return false;
     }
 }
 
@@ -188,8 +173,7 @@ async function notifyAdminNewRequest(requestData) {
         `👤 นักศึกษา: ${requestData.prefix}${requestData.firstName} ${requestData.lastName}\n` +
         `🆔 รหัส: ${requestData.studentId}\n` +
         `🏢 สถานที่: ${requestData.companyName}\n` +
-        `📅 วันที่: ${new Date().toLocaleString('th-TH')}\n\n` +
-        `กรุณาดำเนินการที่ระบบ`;
+        `📅 วันที่: ${new Date().toLocaleString('th-TH')}`;
 
     return await sendLineMessage(ADMIN_USER_ID, message);
 }
@@ -203,13 +187,12 @@ async function notifyAdminStudentUpload(requestData) {
         return { success: false, error: 'No Admin User ID' };
     }
 
-    const message = `📩 นักศึกษาอัปโหลดเอกสารตอบกลับจากบริษัท\n\n` +
+    const message = `📩 นักศึกษาอัปโหลดเอกสารตอบกลับ\n\n` +
         `📋 เลขที่คำร้อง: ${requestData.requestNumber}\n` +
         `👤 นักศึกษา: ${requestData.prefix}${requestData.firstName} ${requestData.lastName}\n` +
         `🆔 รหัส: ${requestData.studentId}\n` +
         `🏢 สถานที่: ${requestData.companyName}\n` +
-        `📅 วันที่: ${new Date().toLocaleString('th-TH')}\n\n` +
-        `กรุณาตรวจสอบและดำเนินการต่อ`;
+        `📅 วันที่: ${new Date().toLocaleString('th-TH')}`;
 
     return await sendLineMessage(ADMIN_USER_ID, message);
 }
@@ -236,17 +219,6 @@ async function notifyStudentReady(studentId, studentName, requestNumber, docType
     return await sendLineMessage(userId, message);
 }
 
-// ============================================================
-//  ส่งข้อความหาหลายคน
-// ============================================================
-async function sendLineToMany(userIds, message) {
-    const results = [];
-    for (const userId of userIds) {
-        results.push(await sendLineMessage(userId, message));
-    }
-    return results;
-}
-
 module.exports = {
     LINE_TOKEN,
     LINE_CHANNEL_ID,
@@ -257,6 +229,5 @@ module.exports = {
     sendLineMessage,
     notifyAdminNewRequest,
     notifyAdminStudentUpload,
-    notifyStudentReady,
-    sendLineToMany
+    notifyStudentReady
 };
