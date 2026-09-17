@@ -5,6 +5,13 @@ const https = require('https');
 console.log('🔥 lineController.js version: 2026-09-17-v3');
 
 class LineController {
+    constructor() {
+        // ✅ ผูก this ให้ทุก method
+        this.webhook = this.webhook.bind(this);
+        this.handleEvent = this.handleEvent.bind(this);
+        this.replyMessage = this.replyMessage.bind(this);
+        this.getProfile = this.getProfile.bind(this);
+    }
     // ============================================================
     //  Webhook
     // ============================================================
