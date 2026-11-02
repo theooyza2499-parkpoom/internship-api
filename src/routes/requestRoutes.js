@@ -32,5 +32,7 @@ router.post('/upload-referral/:requestNumber',
   requestController.uploadReferralLetter
 );
 router.delete('/delete/:requestNumber', auth, adminOnly, requestController.deleteRequest);
+router.delete('/document/:requestNumber', auth, adminOnly, requestController.deleteDocument);
+router.put('/status/:requestNumber', auth, adminOnly, requestController.updateStatus);
 
 module.exports = router;

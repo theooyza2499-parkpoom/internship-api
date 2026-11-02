@@ -33,6 +33,45 @@ async function getRequestByNumber(requestNumber) {
     }
 }
 
+// ลิงก์ดาวน์โหลดไฟล์จริงผ่าน API (ใช้แทน webViewLink ซึ่งเป็นหน้าเว็บ Drive ไม่ใช่ไฟล์)
+function buildFileDownloadUrl(req, requestNumber, studentId, type) {
+    const protocol = req.get('x-forwarded-proto') || req.protocol;
+    return `${protocol}://${req.get('host')}/api/requests/file/${encodeURIComponent(requestNumber)}` +
+        `?studentId=${encodeURIComponent(studentId)}&type=${type}`;
+}
+
+// คอลัมน์ของเอกสารแต่ละประเภทในชีต "คำร้องขอฝึกประสบการณ์"
+// index = ตำแหน่งคอลัมน์ลิงก์ (เริ่มที่ 0), cells = คอลัมน์ที่ต้องล้างเมื่อลบเอกสาร
+// revertStatus = สถานะที่ย้อนกลับไปเมื่อลบเอกสารนั้น
+const DOCUMENT_TYPES = {
+    response: {
+        label: 'หนังสือขอความอนุเคราะห์',
+        index: 21,                 // V
+        cells: ['V', 'W', 'X'],    // ลิงก์, วันที่อัปโหลด, วันที่นักศึกษาดาวน์โหลด
+        revertStatus: '⏳ รอจัดทำหนังสือขอความอนุเคราะห์'
+    },
+    company: {
+        label: 'หนังสือตอบรับจากบริษัท',
+        index: 24,                 // Y
+        cells: ['Y', 'Z', 'AD'],   // ลิงก์, วันที่อัปโหลด, ชื่อไฟล์
+        revertStatus: '📄 หนังสือขอความอนุเคราะห์พร้อมดาวน์โหลด'
+    },
+    referral: {
+        label: 'หนังสือส่งตัว',
+        index: 26,                 // AA
+        cells: ['AA', 'AB', 'AC'], // ลิงก์, วันที่อัปโหลด, วันที่นักศึกษาดาวน์โหลด
+        revertStatus: '⏳ รอจัดทำหนังสือส่งตัว'
+    }
+};
+
+const VALID_STATUSES = [
+    '⏳ รอจัดทำหนังสือขอความอนุเคราะห์',
+    '📄 หนังสือขอความอนุเคราะห์พร้อมดาวน์โหลด',
+    '⏳ รอจัดทำหนังสือส่งตัว',
+    '✅ พร้อมดาวน์โหลดหนังสือส่งตัว',
+    '✅ เสร็จสิ้น'
+];
+
 // ============================================================
 //  RequestController Class
 // ============================================================
@@ -509,7 +548,10 @@ class RequestController {
             res.json({
                 success: true,
                 message: 'ดาวน์โหลดหนังสือขอความอนุเคราะห์สำเร็จ',
-                data: { downloadUrl: fileUrl }
+                data: {
+                    downloadUrl: buildFileDownloadUrl(req, requestNumber, studentId, 'response'),
+                    viewUrl: fileUrl
+                }
             });
         } catch (error) {
             console.error('Download error:', error);
@@ -548,7 +590,10 @@ class RequestController {
             res.json({
                 success: true,
                 message: 'ดาวน์โหลดหนังสือส่งตัวสำเร็จ',
-                data: { downloadUrl: fileUrl }
+                data: {
+                    downloadUrl: buildFileDownloadUrl(req, requestNumber, studentId, 'referral'),
+                    viewUrl: fileUrl
+                }
             });
         } catch (error) {
             console.error('Download error:', error);
@@ -581,7 +626,12 @@ class RequestController {
             }
 
             const file = await driveService.getFileStream(fileId);
+            const docLabel = type === 'referral' ? 'หนังสือส่งตัว' : 'หนังสือขอความอนุเคราะห์';
+            const ext = (file.name && file.name.includes('.')) ? file.name.split('.').pop() : 'pdf';
+            const downloadName = `${docLabel}_${requestNumber}.${ext}`;
             res.setHeader('Content-Type', file.mimeType || 'application/pdf');
+            res.setHeader('Content-Disposition',
+                `inline; filename="${requestNumber}.${ext}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
             if (file.size) res.setHeader('Content-Length', file.size);
             file.stream.on('error', (err) => {
                 console.error('File stream error:', err.message);
@@ -591,6 +641,98 @@ class RequestController {
         } catch (error) {
             console.error('Get document file error:', error);
             res.status(500).json({ success: false, message: 'ไม่สามารถดึงไฟล์เอกสารได้' });
+        }
+    }
+
+    // ==========================================================
+    // 9.2 ลบเอกสารที่อัปโหลดแล้ว (Admin) — กรณีอัปโหลดผิด
+    //     ลบไฟล์ใน Drive, ล้างลิงก์/วันที่ในชีต และย้อนสถานะกลับ
+    // ==========================================================
+    async deleteDocument(req, res) {
+        try {
+            const { requestNumber } = req.params;
+            const { type } = req.query;
+            const docType = DOCUMENT_TYPES[type];
+
+            if (!docType) {
+                return res.status(400).json({ success: false, message: 'ประเภทเอกสารไม่ถูกต้อง' });
+            }
+
+            const rowIndex = await sheetsService.findRowByRequestNumber(requestNumber);
+            if (!rowIndex) {
+                return res.status(404).json({ success: false, message: 'ไม่พบคำร้อง' });
+            }
+
+            const requestData = await getRequestByNumber(requestNumber);
+            const fileUrl = requestData[docType.index];
+            if (!fileUrl) {
+                return res.status(404).json({ success: false, message: `ยังไม่มี${docType.label}` });
+            }
+
+            // ลบไฟล์ใน Drive (ถ้าลบไม่ได้ เช่น ถูกลบไปแล้ว ก็ยังล้างข้อมูลในชีตต่อ)
+            const fileId = driveService.extractFileId(fileUrl);
+            if (fileId) {
+                try {
+                    await driveService.deleteFile(fileId);
+                } catch (driveError) {
+                    console.warn(`⚠️ ลบไฟล์ใน Drive ไม่สำเร็จ (${fileId}):`, driveError.message);
+                }
+            }
+
+            const sheetName = 'คำร้องขอฝึกประสบการณ์';
+            for (const column of docType.cells) {
+                await sheetsService.updateCell(sheetName, rowIndex, column, '');
+            }
+            await sheetsService.updateCell(sheetName, rowIndex, 'U', docType.revertStatus);
+
+            await logService.addLog(
+                requestNumber,
+                `ลบ${docType.label}`,
+                `Admin ลบ${docType.label} และเปลี่ยนสถานะเป็น "${docType.revertStatus}"`,
+                'admin'
+            );
+
+            res.json({
+                success: true,
+                message: `ลบ${docType.label}สำเร็จ`,
+                data: { status: docType.revertStatus }
+            });
+        } catch (error) {
+            console.error('Delete document error:', error);
+            res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการลบเอกสาร' });
+        }
+    }
+
+    // ==========================================================
+    // 9.3 เปลี่ยนสถานะคำร้อง (Admin)
+    // ==========================================================
+    async updateStatus(req, res) {
+        try {
+            const { requestNumber } = req.params;
+            const { status } = req.body;
+
+            if (!VALID_STATUSES.includes(status)) {
+                return res.status(400).json({ success: false, message: 'สถานะไม่ถูกต้อง' });
+            }
+
+            const rowIndex = await sheetsService.findRowByRequestNumber(requestNumber);
+            if (!rowIndex) {
+                return res.status(404).json({ success: false, message: 'ไม่พบคำร้อง' });
+            }
+
+            await sheetsService.updateCell('คำร้องขอฝึกประสบการณ์', rowIndex, 'U', status);
+
+            await logService.addLog(
+                requestNumber,
+                'เปลี่ยนสถานะ',
+                `Admin เปลี่ยนสถานะเป็น "${status}"`,
+                'admin'
+            );
+
+            res.json({ success: true, message: 'เปลี่ยนสถานะสำเร็จ', data: { status } });
+        } catch (error) {
+            console.error('Update status error:', error);
+            res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ' });
         }
     }
 
