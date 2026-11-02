@@ -5,8 +5,13 @@ const readline = require('readline');
 const open = require('open');
 
 // ที่อยู่ของไฟล์ Credentials และ Token
-const CREDENTIALS_PATH = path.join(__dirname, '../../credentials/oauth-credentials.json');
-const TOKEN_PATH = path.join(__dirname, '../../credentials/token.json');
+// Production: อ่านจาก Render Secret Files (/etc/secrets) — ไฟล์ไม่อยู่ใน Git
+const isProduction = process.env.NODE_ENV === 'production';
+const CREDENTIALS_DIR = isProduction
+  ? '/etc/secrets'
+  : path.join(__dirname, '../../credentials');
+const CREDENTIALS_PATH = path.join(CREDENTIALS_DIR, 'oauth-credentials.json');
+const TOKEN_PATH = path.join(CREDENTIALS_DIR, 'token.json');
 
 /**
  * รับ OAuth 2.0 Client ที่พร้อมใช้งาน
@@ -35,7 +40,12 @@ async function getOAuthClient() {
     try {
       const token = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf8'));
       oAuth2Client.setCredentials(token);
-      
+
+      // /etc/secrets เขียนไม่ได้ — ให้ googleapis รีเฟรช access token เองในหน่วยความจำด้วย refresh_token
+      if (isProduction) {
+        return oAuth2Client;
+      }
+
       // ตรวจสอบว่า Token หมดอายุหรือไม่
       if (token.expiry_date && Date.now() >= token.expiry_date) {
         console.log('🔄 Token หมดอายุ กำลังรีเฟรช...');
@@ -68,6 +78,11 @@ async function getOAuthClient() {
  * ขั้นตอนการล็อกอินครั้งแรก (รับ Token ใหม่)
  */
 async function getNewToken(oAuth2Client) {
+  // บนเซิร์ฟเวอร์ไม่มีคนพิมพ์ code ให้ ถ้ารอ readline จะค้างตลอดไป
+  if (isProduction) {
+    throw new Error(`❌ ไม่มี OAuth token ที่ใช้ได้ กรุณาอัปโหลด token.json ไปที่ ${CREDENTIALS_DIR}`);
+  }
+
   const authUrl = oAuth2Client.generateAuthUrl({
     access_type: 'offline', // สำคัญ! เพื่อให้ได้ Refresh Token
     scope: [

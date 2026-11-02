@@ -1,6 +1,23 @@
-# Google Credentials
-credentials/*.json
+# Dependencies
+node_modules/
+
+# Environment (ห้าม commit เด็ดขาด)
+.env
+.env.*
+!.env.example
+
+# Google / LINE Credentials (Production ใช้ Render Secret Files ที่ /etc/secrets)
+credentials/
 *.key.json
 service-account-key.json
 GOOGLE_CREDENTIALS.json
-credentials/*.txt
+
+# Uploads / ไฟล์ทดสอบ (อาจมีข้อมูลส่วนตัวนักศึกษา)
+uploads/
+response_letter_*
+test.pdf
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/

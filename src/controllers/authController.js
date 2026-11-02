@@ -2,9 +2,10 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const sheetsService = require('../services/sheetsService');
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '1234';
-const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
+// ค่าเหล่านี้ต้องมาจาก Environment Variable เท่านั้น (server.js ตรวจสอบตอนเริ่มระบบ)
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 class AuthController {
   // Login Admin

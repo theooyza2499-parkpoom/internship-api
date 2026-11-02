@@ -4,6 +4,17 @@ const path = require('path');
 require('dotenv').config();
 
 // ============================================================
+//  0. ตรวจสอบ Secrets ที่จำเป็น (ไม่มีค่า default เพื่อความปลอดภัย)
+// ============================================================
+const REQUIRED_ENV = ['ADMIN_USERNAME', 'ADMIN_PASSWORD', 'JWT_SECRET'];
+const missingEnv = REQUIRED_ENV.filter((key) => !process.env[key]);
+if (missingEnv.length > 0) {
+    console.error(`❌ ไม่พบ Environment Variables: ${missingEnv.join(', ')}`);
+    console.error('💡 ดูตัวอย่างที่ .env.example');
+    process.exit(1);
+}
+
+// ============================================================
 //  1. Route Imports
 // ============================================================
 const authRoutes = require('./src/routes/authRoutes');
