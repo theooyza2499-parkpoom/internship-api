@@ -151,6 +151,30 @@ class DriveService {
       throw error;
     }
   }
+
+  // ดึงเนื้อไฟล์จริงเป็น stream (ใช้ส่งต่อให้นักศึกษาดาวน์โหลดผ่าน API)
+  async getFileStream(fileId) {
+    try {
+      const drive = await getDrive();
+      const meta = await drive.files.get({ fileId, fields: 'name, mimeType, size' });
+      const response = await drive.files.get(
+        { fileId, alt: 'media' },
+        { responseType: 'stream' }
+      );
+      return { stream: response.data, ...meta.data };
+    } catch (error) {
+      console.error('❌ Error downloading file:', error);
+      throw error;
+    }
+  }
+}
+
+// ดึง fileId จากลิงก์ Google Drive (รองรับ /file/d/<id>/view และ ?id=<id>)
+function extractFileId(url) {
+  if (!url) return null;
+  const match = url.match(/\/d\/([\w-]+)/) || url.match(/[?&]id=([\w-]+)/);
+  return match ? match[1] : null;
 }
 
 module.exports = new DriveService();
+module.exports.extractFileId = extractFileId;

@@ -14,6 +14,7 @@ router.post('/upload-company-response/:requestNumber',
 );
 router.get('/download-response/:requestNumber', requestController.downloadResponseLetter);
 router.get('/download-referral/:requestNumber', requestController.downloadReferralLetter);
+router.get('/file/:requestNumber', requestController.getDocumentFile);
 
 // Admin Routes
 router.get('/all', auth, adminOnly, requestController.getAllRequests);

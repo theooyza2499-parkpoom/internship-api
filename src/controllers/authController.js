@@ -25,7 +25,7 @@ class AuthController {
       const token = jwt.sign(
         { username, role: 'admin' },
         JWT_SECRET,
-        { expiresIn: '24h' }
+        { expiresIn: '60m' } // Admin อยู่ในระบบได้ 60 นาที
       );
 
       res.json({

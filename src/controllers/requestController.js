@@ -557,6 +557,44 @@ class RequestController {
     }
 
     // ==========================================================
+    // 9.1 ส่งไฟล์เอกสารจริง (นักศึกษา) — ดึงจาก Drive แล้วส่งต่อเป็นไฟล์
+    //     (ลิงก์ webViewLink เป็นหน้าเว็บ Drive ไม่ใช่ไฟล์ PDF)
+    // ==========================================================
+    async getDocumentFile(req, res) {
+        try {
+            const { requestNumber } = req.params;
+            const { studentId, type } = req.query;
+
+            const requestData = await getRequestByNumber(requestNumber);
+            if (!requestData) {
+                return res.status(404).json({ success: false, message: 'ไม่พบคำร้อง' });
+            }
+            if (!studentId || requestData[1] !== studentId) {
+                return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์' });
+            }
+
+            // คอลัมน์ V (21) = หนังสือขอความอนุเคราะห์, AA (26) = หนังสือส่งตัว
+            const fileUrl = type === 'referral' ? requestData[26] : requestData[21];
+            const fileId = driveService.extractFileId(fileUrl);
+            if (!fileId) {
+                return res.status(404).json({ success: false, message: 'ยังไม่มีไฟล์เอกสาร' });
+            }
+
+            const file = await driveService.getFileStream(fileId);
+            res.setHeader('Content-Type', file.mimeType || 'application/pdf');
+            if (file.size) res.setHeader('Content-Length', file.size);
+            file.stream.on('error', (err) => {
+                console.error('File stream error:', err.message);
+                res.destroy(err);
+            });
+            file.stream.pipe(res);
+        } catch (error) {
+            console.error('Get document file error:', error);
+            res.status(500).json({ success: false, message: 'ไม่สามารถดึงไฟล์เอกสารได้' });
+        }
+    }
+
+    // ==========================================================
     // 10. ลบคำร้อง (Admin)
     // ==========================================================
     async deleteRequest(req, res) {
