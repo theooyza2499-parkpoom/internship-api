@@ -391,14 +391,28 @@ async function notifyAllAdmins(message) {
     return results;
 }
 
+// ============================================================
+//  ✅ ลิงก์เปิดใบคำร้องโดยตรง (LINE แปลง URL ในข้อความเป็นลิงก์ให้อัตโนมัติ)
+// ============================================================
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://internship.evc.ac.th').replace(/\/+$/, '');
+
+function adminRequestUrl(requestNumber) {
+    return `${FRONTEND_URL}/admin.html?request=${encodeURIComponent(requestNumber)}`;
+}
+
+function studentStatusUrl(studentId) {
+    return `${FRONTEND_URL}/student.html?tab=status&studentId=${encodeURIComponent(studentId)}`;
+}
+
 async function notifyAdminNewRequest(requestData) {
     const message = `📢 มีคำร้องใหม่!\n\n` +
         `📋 เลขที่: ${requestData.requestNumber}\n` +
         `👤 ${requestData.prefix}${requestData.firstName} ${requestData.lastName}\n` +
         `🆔 ${requestData.studentId}\n` +
         `🏢 ${requestData.companyName}\n` +
-        `📅 ${new Date().toLocaleString('th-TH')}`;
-    
+        `📅 ${new Date().toLocaleString('th-TH')}\n\n` +
+        `🔗 เปิดใบคำร้อง:\n${adminRequestUrl(requestData.requestNumber)}`;
+
     return await notifyAllAdmins(message);
 }
 
@@ -408,8 +422,9 @@ async function notifyAdminStudentUpload(requestData) {
         `👤 ${requestData.prefix}${requestData.firstName} ${requestData.lastName}\n` +
         `🆔 ${requestData.studentId}\n` +
         `🏢 ${requestData.companyName}\n` +
-        `📅 ${new Date().toLocaleString('th-TH')}`;
-    
+        `📅 ${new Date().toLocaleString('th-TH')}\n\n` +
+        `🔗 เปิดใบคำร้อง:\n${adminRequestUrl(requestData.requestNumber)}`;
+
     return await notifyAllAdmins(message);
 }
 
@@ -422,7 +437,8 @@ async function notifyStudentReady(studentId, studentName, requestNumber, docType
         `📋 เลขที่: ${requestNumber}\n` +
         `👤 ${studentName}\n` +
         `📄 ${docName}\n` +
-        `📅 ${new Date().toLocaleString('th-TH')}`;
+        `📅 ${new Date().toLocaleString('th-TH')}\n\n` +
+        `🔗 เปิดดูคำร้อง:\n${studentStatusUrl(studentId)}`;
     
     return await sendLineMessage(userId, message);
 }
@@ -446,5 +462,7 @@ module.exports = {
     notifyAllAdmins,
     notifyAdminNewRequest,
     notifyAdminStudentUpload,
-    notifyStudentReady
+    notifyStudentReady,
+    adminRequestUrl,
+    studentStatusUrl
 };
